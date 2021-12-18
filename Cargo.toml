@@ -1,0 +1,3 @@
+[workspace]
+
+members = ["fixed_typemap", "fixed_typemap_macros"]

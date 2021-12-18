@@ -1,5 +1,7 @@
 #![no_std]
 
+pub use fixed_typemap_macros::*;
+
 /// A trait which represents the ability of a type to key a typemap.
 ///
 /// `Key<TypeMap>` means that the type this trait is implemented for is in the

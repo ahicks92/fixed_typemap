@@ -150,6 +150,24 @@ fn build_key_traits(map: &Map) -> TokenStream2 {
     quote!(#(#impls)*)
 }
 
+fn build_constructors(map: &Map) -> TokenStream2 {
+    let mut joined_fields = vec![];
+
+    for e in map.entries.iter() {
+        let name = e.name.as_ref().unwrap();
+        let initializer = &e.initializer;
+        joined_fields.push(quote!(#name: #initializer));
+    }
+
+    quote!(
+        pub fn new() -> Self {
+            Self {
+                #(#joined_fields),*
+            }
+        }
+    )
+}
+
 /// Build the low-level unsafe get methods.
 fn build_unsafe_getters(map: &Map) -> TokenStream2 {
     let mut type_field = vec![];
@@ -201,10 +219,12 @@ fn build_safe_getters(map: &Map) -> TokenStream2 {
 
 fn build_impl_block(map: &Map) -> TokenStream2 {
     let mn = &map.name;
+    let constructors = build_constructors(map);
     let unsafe_getters = build_unsafe_getters(map);
     let safe_getters = build_safe_getters(map);
 
     quote!(impl #mn {
+        #constructors
         #unsafe_getters
         #safe_getters
     })

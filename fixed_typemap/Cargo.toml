@@ -2,9 +2,9 @@
 name = "fixed_typemap"
 version = "0.1.0"
 edition = "2021"
-license = "Unlicense"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-fixed_typemap_macros = { path = "../fixed_typemap_macros", version = "0.1.0" }
+fixed_typemap_internals = { version = "0.1.0", path = "../fixed_typemap_internals" }
+fixed_typemap_macros = { version = "0.1.0", path = "../fixed_typemap_macros" }

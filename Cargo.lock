@@ -6,6 +6,14 @@ version = 3
 name = "fixed_typemap"
 version = "0.1.0"
 dependencies = [
+ "fixed_typemap_internals",
+ "fixed_typemap_macros",
+]
+
+[[package]]
+name = "fixed_typemap_internals"
+version = "0.1.0"
+dependencies = [
  "fixed_typemap_macros",
 ]
 
@@ -13,6 +21,7 @@ dependencies = [
 name = "fixed_typemap_macros"
 version = "0.1.0"
 dependencies = [
+ "proc-macro2",
  "quote",
  "syn",
 ]

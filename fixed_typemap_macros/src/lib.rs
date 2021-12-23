@@ -330,15 +330,15 @@ fn build_unsafe_getters(map: &Map) -> TokenStream2 {
             let downcaster = fast_unwrap(quote!((&#maybe_mut *x.value).#any_ref::<K>()));
 
             final_clause = quote!({
-                self.#df.#map_getter(&std::any::TypeId::of::<K>()).map(|x| {
+                self.#df.#map_getter(&core::any::TypeId::of::<K>()).map(|x| {
                     (#downcaster) as *#const_or_mut K as *#const_or_mut u8
                 })
             });
         }
 
         funcs.push(quote!(
-            fn #fident<K: std::any::Any>(&#maybe_mut self) -> Option<*#const_or_mut u8> {
-                use std::any::Any;
+            fn #fident<K: core::any::Any>(&#maybe_mut self) -> Option<*#const_or_mut u8> {
+                use core::any::Any;
 
                 #(#clauses)*
 
@@ -400,7 +400,7 @@ fn build_insert(map: &Map) -> TokenStream2 {
         use core::any::Any;
 
         if let Some(x) = self.get_mut_ptr::<K>() {
-            std::mem::swap(&mut value, unsafe { &mut *(x as *mut K) });
+            core::mem::swap(&mut value, unsafe { &mut *(x as *mut K) });
             return Ok(Some(value));
         }
 

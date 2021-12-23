@@ -131,7 +131,7 @@ fn ensure_names(map: &mut Map) {
         }
     }
 
-    if used_names.contains("dynamic_keys") {
+    if !used_names.contains("dynamic_keys") {
         map.dynamic_field_name = quote::format_ident!("dynamic_keys");
     } else {
         let mut dyn_i: u32 = 0;
@@ -147,8 +147,22 @@ fn ensure_names(map: &mut Map) {
     }
 }
 
+/// Builds the cell type of the map, which is used in dynamic contexts to hold map entries.
+///
+/// If the map isn't dynamic, returns an empty token stream.
+fn build_cell_type(m: &Map) -> TokenStream2 {
+    if !m.parsed_attrs.dynamic {
+        return quote!();
+    }
+
+    let name = &m.dynamic_cell_name;
+    quote!(struct #name {
+        value: std::boxed::Box<dyn std::any::Any>,
+    })
+}
+
 /// Define the struct itself.
-fn quote_struct(map: &Map) -> TokenStream2 {
+fn build_struct(map: &Map) -> TokenStream2 {
     let mut fields = vec![];
 
     for e in map.entries.iter() {
@@ -160,6 +174,12 @@ fn quote_struct(map: &Map) -> TokenStream2 {
             ..
         } = e;
         fields.push(quote!(#(#attrs)* #vis #name : #key_type));
+    }
+
+    if map.parsed_attrs.dynamic {
+        let dn = &map.dynamic_field_name;
+        let cn = &map.dynamic_cell_name;
+        fields.push(quote!(#dn: std::collections::HashMap<std::any::TypeId, #cn>));
     }
 
     let forwarded_attrs = &map.forwarded_attrs;
@@ -191,6 +211,11 @@ fn build_constructors(map: &Map) -> TokenStream2 {
         let name = e.name.as_ref().unwrap();
         let initializer = &e.initializer;
         joined_fields.push(quote!(#name: #initializer));
+    }
+
+    if map.parsed_attrs.dynamic {
+        let dn = &map.dynamic_field_name;
+        joined_fields.push(quote!(#dn: Default::default()));
     }
 
     quote!(
@@ -250,20 +275,6 @@ fn fast_unwrap(expr: TokenStream2) -> TokenStream2 {
     })
 }
 
-/// Builds the cell type of the map, which is used in dynamic contexts to hold map entries.
-///
-/// If the map isn't dynamic, returns an empty token stream.
-fn build_cell_type(m: &Map) -> TokenStream2 {
-    if !m.parsed_attrs.dynamic {
-        return quote!();
-    }
-
-    let name = &m.dynamic_cell_name;
-    quote!(struct #name {
-        value: std::boxed::Box<dyn std::any::Any>,
-    })
-}
-
 fn build_infallible_getters(map: &Map) -> TokenStream2 {
     let mn = &map.name;
     let const_getter = fast_unwrap(quote!(self.get_const_ptr::<K>()));
@@ -296,7 +307,7 @@ fn build_impl_block(map: &Map) -> TokenStream2 {
 pub fn decl_fixed_typemap(input: TokenStream) -> TokenStream {
     let mut map = syn::parse_macro_input!(input as Map);
     ensure_names(&mut map);
-    let struct_def = quote_struct(&map);
+    let struct_def = build_struct(&map);
     let key_traits = build_key_traits(&map);
     let cell_type = build_cell_type(&map);
     let impl_block = build_impl_block(&map);

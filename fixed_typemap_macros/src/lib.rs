@@ -317,25 +317,39 @@ fn build_infallible_getters(map: &Map) -> TokenStream2 {
     )
 }
 
+fn build_fallible_getters() -> TokenStream2 {
+    quote!(
+        pub fn get<K: core::any::Any>(&self) -> Option<&K> {
+            self.get_const_ptr::<K>()
+                .map(|x| unsafe { &*(x as *const K) })
+        }
+
+        pub fn get_mut<K: core::any::Any>(&mut self) -> Option<&mut K> {
+            self.get_mut_ptr::<K>()
+                .map(|x| unsafe { &mut *(x as *mut K) })
+        }
+    )
+}
+
 fn build_insert(map: &Map) -> TokenStream2 {
-    let mut dynamic_clause = quote!(None);
+    let mut dynamic_clause = quote!(Err(()));
     if map.parsed_attrs.dynamic {
         let df = &map.dynamic_field_name;
         let dc = &map.dynamic_cell_name;
         let unwrapper = fast_unwrap(quote!(x.value.downcast::<K>().ok()));
         dynamic_clause = quote!(
             let tid = core::any::TypeId::of::<K>();
-            self.#df.insert(tid, #dc::new(value))
-                .map(|x| *(#unwrapper))
+            Ok(self.#df.insert(tid, #dc::new(value))
+                .map(|x| *(#unwrapper)))
         );
     }
 
-    quote!(pub fn insert<K: core::any::Any>(&mut self, mut value: K) -> Option<K> {
+    quote!(pub fn insert<K: core::any::Any>(&mut self, mut value: K) -> Result<Option<K>, ()> {
         use core::any::Any;
 
         if let Some(x) = self.get_mut_ptr::<K>() {
             std::mem::swap(&mut value, unsafe { &mut *(x as *mut K) });
-            return Some(value);
+            return Ok(Some(value));
         }
 
         #dynamic_clause
@@ -346,13 +360,15 @@ fn build_impl_block(map: &Map) -> TokenStream2 {
     let mn = &map.name;
     let constructors = build_constructors(map);
     let unsafe_getters = build_unsafe_getters(map);
-    let safe_getters = build_infallible_getters(map);
+    let infallible_getters = build_infallible_getters(map);
+    let fallible_getters = build_fallible_getters();
     let insert = build_insert(map);
 
     quote!(impl #mn {
         #constructors
         #unsafe_getters
-        #safe_getters
+        #infallible_getters
+        #fallible_getters
         #insert
     })
 }

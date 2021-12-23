@@ -2,12 +2,8 @@
 
 pub use fixed_typemap_macros::*;
 
-/// A trait which represents the ability of a type to key a typemap.
+/// A trait which represents the ability of a type to key a typemap infallibly.
 ///
-/// `Key<TypeMap>` means that the type this trait is implemented for is in the
-/// specified typemap, and produces the specific kind of value.  The macros
-/// implement this trait for you; see the documentation there for details.
-///
-/// You should never implement this trait yourself.
-pub unsafe trait Key<Map>: Sized + core::any::Any {
-}
+/// `impl InfallibleKey<Typemap> for T` means that `T` is definitely known to be in the typemap, and as a consequence we
+/// can return it without having to wrap it in `Option`. You should never implement this trait yourself.
+pub unsafe trait InfallibleKey<Map>: Sized + core::any::Any {}

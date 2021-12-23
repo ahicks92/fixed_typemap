@@ -131,7 +131,7 @@ fn build_key_traits(map: &Map) -> TokenStream2 {
         let name = &map.name;
         let key_type = &e.key_type;
         impls.push(
-            quote!(unsafe impl fixed_typemap_internals::Key<#name> for #key_type {
+            quote!(unsafe impl fixed_typemap_internals::InfallibleKey<#name> for #key_type {
             }),
         );
     }
@@ -171,15 +171,18 @@ fn build_unsafe_getters(map: &Map) -> TokenStream2 {
         ("get_mut_ptr", quote!(mut), quote!(mut)),
     ] {
         let fident = quote::format_ident!("{}", fname);
-        let clauses = type_field.iter().map(|(key, field)| {
-            quote!(if core::any::TypeId::of::<K>() == core::any::TypeId::of::<#key>() {
-                return &#maybe_mut self.#field
-                    as *#const_or_mut #key as *#const_or_mut u8;
+        let clauses = type_field
+            .iter()
+            .map(|(key, field)| {
+                quote!(if core::any::TypeId::of::<K>() == core::any::TypeId::of::<#key>() {
+                    return &#maybe_mut self.#field
+                        as *#const_or_mut #key as *#const_or_mut u8;
+                })
             })
-        }).collect::<Vec<_>>();
+            .collect::<Vec<_>>();
 
         funcs.push(quote!(
-            fn #fident<K: fixed_typemap_internals::Key<Self>>(&#maybe_mut self) -> *#const_or_mut u8 {
+            fn #fident<K: fixed_typemap_internals::InfallibleKey<Self>>(&#maybe_mut self) -> *#const_or_mut u8 {
                 #(#clauses)*
                 // The `Key` trait means that this is never reachable, because we can't get a value as an input that we
                 // didn't expect.
@@ -194,11 +197,11 @@ fn build_unsafe_getters(map: &Map) -> TokenStream2 {
 fn build_safe_getters(map: &Map) -> TokenStream2 {
     let mn = &map.name;
     quote!(
-        pub fn get<K: fixed_typemap_internals::Key<#mn>>(&self) -> &K {
+        pub fn get<K: fixed_typemap_internals::InfallibleKey<#mn>>(&self) -> &K {
             unsafe { &*(self.get_const_ptr::<K>() as *const K) }
         }
 
-        pub fn get_mut<K: fixed_typemap_internals::Key<#mn>>(&mut self) -> &mut K {
+        pub fn get_mut<K: fixed_typemap_internals::InfallibleKey<#mn>>(&mut self) -> &mut K {
             unsafe { &mut *(self.get_mut_ptr::<K>() as *mut K) }
         }
     )

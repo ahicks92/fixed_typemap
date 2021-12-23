@@ -33,6 +33,7 @@ struct Map {
     name: syn::Ident,
     entries: Vec<MapEntry>,
     dynamic_field_name: proc_macro2::Ident,
+    dynamic_cell_name: syn::Ident,
 }
 
 impl Parse for MapEntry {
@@ -96,6 +97,7 @@ impl Parse for Map {
             forwarded_attrs,
             parsed_attrs,
             vis,
+            dynamic_cell_name: quote::format_ident!("{}Cell", name),
             name,
             entries,
             // This is set later, in ensure_names, but we need a dumy value for now.
@@ -227,7 +229,7 @@ fn build_unsafe_getters(map: &Map) -> TokenStream2 {
         funcs.push(quote!(
             fn #fident<K: fixed_typemap_internals::InfallibleKey<Self>>(&#maybe_mut self) -> Option<*#const_or_mut u8> {
                 #(#clauses)*
-        
+
                 None
             }
         ));
@@ -245,6 +247,20 @@ fn fast_unwrap(expr: TokenStream2) -> TokenStream2 {
             Some(x) => x,
             None => unsafe { ::core::hint::unreachable_unchecked() },
         }
+    })
+}
+
+/// Builds the cell type of the map, which is used in dynamic contexts to hold map entries.
+///
+/// If the map isn't dynamic, returns an empty token stream.
+fn build_cell_type(m: &Map) -> TokenStream2 {
+    if !m.parsed_attrs.dynamic {
+        return quote!();
+    }
+
+    let name = &m.dynamic_cell_name;
+    quote!(struct #name {
+        value: std::boxed::Box<dyn std::any::Any>,
     })
 }
 
@@ -282,6 +298,13 @@ pub fn decl_fixed_typemap(input: TokenStream) -> TokenStream {
     ensure_names(&mut map);
     let struct_def = quote_struct(&map);
     let key_traits = build_key_traits(&map);
+    let cell_type = build_cell_type(&map);
     let impl_block = build_impl_block(&map);
-    quote!(#struct_def #key_traits #impl_block).into()
+
+    quote!(#struct_def
+        #key_traits
+        #cell_type
+        #impl_block
+    )
+    .into()
 }

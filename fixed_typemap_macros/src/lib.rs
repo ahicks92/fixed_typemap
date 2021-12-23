@@ -36,6 +36,19 @@ struct Map {
     dynamic_cell_name: syn::Ident,
 }
 
+
+/// Build and return a macro snippet which uses unreachable for a fast unwrap.
+///
+/// Very unsafe, use with care.
+fn fast_unwrap(expr: TokenStream2) -> TokenStream2 {
+    quote!({
+        match #expr {
+            Some(x) => x,
+            None => unsafe { ::core::hint::unreachable_unchecked() },
+        }
+    })
+}
+
 impl Parse for MapEntry {
     fn parse(stream: ParseStream) -> PResult<Self> {
         let attrs = syn::Attribute::parse_outer(stream)?;
@@ -282,18 +295,6 @@ fn build_unsafe_getters(map: &Map) -> TokenStream2 {
     }
 
     quote!(#(#funcs)*)
-}
-
-/// Build and return a macro snippet which uses unreachable for a fast unwrap.
-///
-/// Very unsafe, use with care.
-fn fast_unwrap(expr: TokenStream2) -> TokenStream2 {
-    quote!({
-        match #expr {
-            Some(x) => x,
-            None => unsafe { ::core::hint::unreachable_unchecked() },
-        }
-    })
 }
 
 fn build_infallible_getters(map: &Map) -> TokenStream2 {

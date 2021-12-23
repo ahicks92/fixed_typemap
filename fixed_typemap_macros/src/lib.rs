@@ -32,6 +32,7 @@ struct Map {
     vis: syn::Visibility,
     name: syn::Ident,
     entries: Vec<MapEntry>,
+    dynamic_field_name: proc_macro2::Ident,
 }
 
 impl Parse for MapEntry {
@@ -97,11 +98,15 @@ impl Parse for Map {
             vis,
             name,
             entries,
+            // This is set later, in ensure_names, but we need a dumy value for now.
+            dynamic_field_name: quote::format_ident!("not_set"),
         })
     }
 }
 
 /// Make sure every entry in the map has a name.
+///
+/// Also generate the name of the field for dynamic entries.
 fn ensure_names(map: &mut Map) {
     let mut used_names = HashSet::new();
     let mut ind = 0;
@@ -121,6 +126,21 @@ fn ensure_names(map: &mut Map) {
             }
         } else {
             used_names.insert(m.name.as_ref().unwrap().to_string());
+        }
+    }
+
+    if used_names.contains("dynamic_keys") {
+        map.dynamic_field_name = quote::format_ident!("dynamic_keys");
+    } else {
+        let mut dyn_i: u32 = 0;
+        loop {
+            let candidate = format!("dynamic_keys_{}", dyn_i);
+            if used_names.contains(&candidate) {
+                dyn_i += 1;
+                continue;
+            }
+            map.dynamic_field_name = quote::format_ident!("{}", candidate);
+            break;
         }
     }
 }

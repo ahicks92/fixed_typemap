@@ -40,7 +40,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_getters() {
+    fn test_infallible_getters() {
         let mut map = ExampleMap::new();
 
         map.get_infallible_mut::<Time>().0 = 5;

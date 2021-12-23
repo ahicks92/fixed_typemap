@@ -248,7 +248,7 @@ fn fast_unwrap(expr: TokenStream2) -> TokenStream2 {
     })
 }
 
-fn build_safe_getters(map: &Map) -> TokenStream2 {
+fn build_infallible_getters(map: &Map) -> TokenStream2 {
     let mn = &map.name;
     let const_getter = fast_unwrap(quote!(self.get_const_ptr::<K>()));
     let mut_getter = fast_unwrap(quote!(self.get_mut_ptr::<K>()));
@@ -267,7 +267,7 @@ fn build_impl_block(map: &Map) -> TokenStream2 {
     let mn = &map.name;
     let constructors = build_constructors(map);
     let unsafe_getters = build_unsafe_getters(map);
-    let safe_getters = build_safe_getters(map);
+    let safe_getters = build_infallible_getters(map);
 
     quote!(impl #mn {
         #constructors

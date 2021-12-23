@@ -25,7 +25,7 @@ pub fn build_initial_metrics() -> Metrics {
 }
 
 decl_fixed_typemap!(
-    pub struct ExampleMapNoStd {
+    pub struct ExampleMapFixed {
         /// Let's let the name field be public.
         name: String,
         _: Time,
@@ -51,7 +51,7 @@ mod tests {
 
     #[test]
     fn test_infallible_getters() {
-        let mut map = ExampleMapNoStd::new();
+        let mut map = ExampleMapFixed::new();
 
         map.get_infallible_mut::<Time>().0 = 5;
         assert_eq!(map.get_infallible::<Time>().0, 5);
@@ -89,7 +89,7 @@ mod tests {
 
     #[test]
     fn test_inserting_fixed() {
-        let mut map = ExampleMapNoStd::new();
+        let mut map = ExampleMapFixed::new();
 
         // Inserting our own types should be able to replace.
         //

@@ -236,10 +236,11 @@ fn build_unsafe_getters(map: &Map) -> TokenStream2 {
 
     let mut funcs = vec![];
 
-    for (fname, const_or_mut, maybe_mut) in [
-        ("get_const_ptr", quote!(const), quote!()),
-        ("get_mut_ptr", quote!(mut), quote!(mut)),
-    ] {
+    for (fname, is_mut) in [("get_const_ptr", false), ("get_mut_ptr", true)] {
+        let const_or_mut = if is_mut { quote!(mut) } else { quote!(const) };
+
+        let maybe_mut = if is_mut { quote!(mut) } else { quote!() };
+
         let fident = quote::format_ident!("{}", fname);
         let clauses = type_field
             .iter()
@@ -251,11 +252,28 @@ fn build_unsafe_getters(map: &Map) -> TokenStream2 {
             })
             .collect::<Vec<_>>();
 
+        let mut final_clause = quote!(None);
+        if map.parsed_attrs.dynamic {
+            let suffix = if is_mut { "_mut" } else { "" };
+            let map_getter = quote::format_ident!("get{}", suffix);
+            let any_ref = quote::format_ident!("downcast_{}", if is_mut { "mut" } else { "ref" });
+            let df = &map.dynamic_field_name;
+            let downcaster = fast_unwrap(quote!((&#maybe_mut *x.value).#any_ref::<K>()));
+
+            final_clause = quote!({
+                self.#df.#map_getter(&std::any::TypeId::of::<K>()).map(|x| {
+                    (#downcaster) as *#const_or_mut K as *#const_or_mut u8
+                })
+            });
+        }
+
         funcs.push(quote!(
             fn #fident<K: fixed_typemap_internals::InfallibleKey<Self>>(&#maybe_mut self) -> Option<*#const_or_mut u8> {
+                use std::any::Any;
+
                 #(#clauses)*
 
-                None
+                #final_clause
             }
         ));
     }

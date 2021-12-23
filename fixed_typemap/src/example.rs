@@ -43,21 +43,21 @@ mod tests {
     fn test_getters() {
         let mut map = ExampleMap::new();
 
-        map.get_mut::<Time>().0 = 5;
-        assert_eq!(map.get::<Time>().0, 5);
+        map.get_infallible_mut::<Time>().0 = 5;
+        assert_eq!(map.get_infallible::<Time>().0, 5);
 
-        assert_eq!(map.get::<Filesystem>().path, "");
-        map.get_mut::<Filesystem>().path = "foo";
-        assert_eq!(map.get::<Filesystem>().path, "foo");
+        assert_eq!(map.get_infallible::<Filesystem>().path, "");
+        map.get_infallible_mut::<Filesystem>().path = "foo";
+        assert_eq!(map.get_infallible::<Filesystem>().path, "foo");
 
         {
-            let metrics = &map.get::<Metrics>().0;
+            let metrics = &map.get_infallible_mut::<Metrics>().0;
             assert_eq!(metrics.get("successes"), Some(&5));
             assert_eq!(metrics.get("failures"), Some(&10));
         }
 
         {
-            let metrics_mut = &mut map.get_mut::<Metrics>().0;
+            let metrics_mut = &mut map.get_infallible_mut::<Metrics>().0;
             metrics_mut.insert("bar".into(), 15);
             assert_eq!(metrics_mut.get("bar"), Some(&15));
         }

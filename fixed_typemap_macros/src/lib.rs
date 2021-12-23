@@ -218,18 +218,17 @@ fn build_unsafe_getters(map: &Map) -> TokenStream2 {
             .iter()
             .map(|(key, field)| {
                 quote!(if core::any::TypeId::of::<K>() == core::any::TypeId::of::<#key>() {
-                    return &#maybe_mut self.#field
-                        as *#const_or_mut #key as *#const_or_mut u8;
+                    return Some(&#maybe_mut self.#field
+                        as *#const_or_mut #key as *#const_or_mut u8);
                 })
             })
             .collect::<Vec<_>>();
 
         funcs.push(quote!(
-            fn #fident<K: fixed_typemap_internals::InfallibleKey<Self>>(&#maybe_mut self) -> *#const_or_mut u8 {
+            fn #fident<K: fixed_typemap_internals::InfallibleKey<Self>>(&#maybe_mut self) -> Option<*#const_or_mut u8> {
                 #(#clauses)*
-                // The `Key` trait means that this is never reachable, because we can't get a value as an input that we
-                // didn't expect.
-                unreachable!();
+        
+                None
             }
         ));
     }
@@ -237,15 +236,29 @@ fn build_unsafe_getters(map: &Map) -> TokenStream2 {
     quote!(#(#funcs)*)
 }
 
+/// Build and return a macro snippet which uses unreachable for a fast unwrap.
+///
+/// Very unsafe, use with care.
+fn fast_unwrap(expr: TokenStream2) -> TokenStream2 {
+    quote!({
+        match #expr {
+            Some(x) => x,
+            None => unsafe { ::core::hint::unreachable_unchecked() },
+        }
+    })
+}
+
 fn build_safe_getters(map: &Map) -> TokenStream2 {
     let mn = &map.name;
+    let const_getter = fast_unwrap(quote!(self.get_const_ptr::<K>()));
+    let mut_getter = fast_unwrap(quote!(self.get_mut_ptr::<K>()));
     quote!(
-        pub fn get<K: fixed_typemap_internals::InfallibleKey<#mn>>(&self) -> &K {
-            unsafe { &*(self.get_const_ptr::<K>() as *const K) }
+        pub fn get_infallible<K: fixed_typemap_internals::InfallibleKey<#mn>>(&self) -> &K {
+            unsafe { &*(#const_getter as *const K) }
         }
 
-        pub fn get_mut<K: fixed_typemap_internals::InfallibleKey<#mn>>(&mut self) -> &mut K {
-            unsafe { &mut *(self.get_mut_ptr::<K>() as *mut K) }
+        pub fn get_infallible_mut<K: fixed_typemap_internals::InfallibleKey<#mn>>(&mut self) -> &mut K {
+            unsafe { &mut *(#mut_getter as *mut K) }
         }
     )
 }

@@ -7,7 +7,7 @@ use proc_macro2::TokenStream as TokenStream2;
 use darling::FromAttributes;
 use quote::{quote, quote_spanned};
 use syn::{
-    parse::{Parse, ParseStream, Result as PResult},
+    parse::{Parse, ParseStream, Parser, Result as PResult},
     parse_quote, Token,
 };
 
@@ -16,6 +16,8 @@ use syn::{
 struct MapAttributes {
     #[darling(default)]
     dynamic: bool,
+    #[darling(default)]
+    iterable_traits: std::collections::HashMap<syn::Path, syn::Ident>,
 }
 
 struct MapEntry {
@@ -34,6 +36,7 @@ struct Map {
     entries: Vec<MapEntry>,
     dynamic_field_name: proc_macro2::Ident,
     dynamic_cell_name: syn::Ident,
+    additional_key_constraints: Vec<syn::Path>,
 }
 
 /// Build and return a macro snippet which uses unreachable for a fast unwrap.
@@ -105,6 +108,12 @@ impl Parse for Map {
             .into_iter()
             .collect();
 
+        let additional_key_constraints = parsed_attrs
+            .iterable_traits
+            .keys()
+            .map(|x| x.clone())
+            .collect();
+
         Ok(Map {
             forwarded_attrs,
             parsed_attrs,
@@ -114,6 +123,7 @@ impl Parse for Map {
             entries,
             // This is set later, in ensure_names, but we need a dumy value for now.
             dynamic_field_name: quote::format_ident!("not_set"),
+            additional_key_constraints,
         })
     }
 }
@@ -162,19 +172,57 @@ fn ensure_names(map: &mut Map) {
 /// Builds the cell type of the map, which is used in dynamic contexts to hold map entries.
 ///
 /// If the map isn't dynamic, returns an empty token stream.
-fn build_cell_type(m: &Map) -> TokenStream2 {
-    if !m.parsed_attrs.dynamic {
+fn build_cell_type(map: &Map) -> TokenStream2 {
+    if !map.parsed_attrs.dynamic {
         return quote!();
     }
 
-    let name = &m.dynamic_cell_name;
+    // This type consists of a name, and then a set of function pointers which downcast to all iterable traits named as
+    // the method that they go with.  The function pointers are of the form `username` and `username_mut`, and are used
+    // to implement per-trait iteration.
+    //
+    // Each function pointer takes a `&dyn Any` and infallibly casts to the type of the object in the cell, then to the
+    // trait object that type would generate. To avoid having to put named functions in a module, we just use the fact
+    // that closures coerce to function pointers if they don't capture.
+
+    let name = &map.dynamic_cell_name;
+
+    let mut field_decls = vec![];
+    let mut initializers = vec![];
+
+    for (path, field_name) in map.parsed_attrs.iterable_traits.iter() {
+        let name_mut = quote::format_ident!("{}_mut", field_name);
+
+        field_decls.push(quote!(#field_name: fn(&dyn core::any::Any) -> &dyn #path));
+        field_decls.push(quote!(#name_mut: fn(&mut dyn core::any::Any) -> &mut dyn #path));
+
+        for (fieldname, ref_or_mut, maybe_mut) in [
+            (field_name, "ref", quote!()),
+            (&name_mut, "mut", quote!(mut)),
+        ] {
+            let dcast = quote::format_ident!("downcast_{}", ref_or_mut);
+            initializers.push(quote!(
+                #fieldname: |x| match x.#dcast::<K>() {
+                    Some(x) => (&#maybe_mut *x) as &#maybe_mut dyn #path,
+                    None => unsafe { core::hint::unreachable_unchecked() }
+                }
+            ));
+        }
+    }
+
+    let constraints = &map.additional_key_constraints;
+
     quote!(struct #name {
         value: std::boxed::Box<dyn std::any::Any>,
+        #(#field_decls),*
     }
 
     impl #name {
-        fn new<K: core::any::Any>(value: K) -> Self {
-            Self { value: Box::new(value) }
+        fn new<K: core::any::Any + #(#constraints)+*>(value: K) -> Self {
+            Self {
+                value: Box::new(value),
+                #(#initializers),*
+            }
         }
     })
 }
@@ -306,25 +354,27 @@ fn build_infallible_getters(map: &Map) -> TokenStream2 {
     let mn = &map.name;
     let const_getter = fast_unwrap(quote!(self.get_const_ptr::<K>()));
     let mut_getter = fast_unwrap(quote!(self.get_mut_ptr::<K>()));
+    let additional_constraints = &map.additional_key_constraints;
     quote!(
-        pub fn get_infallible<K: fixed_typemap_internals::InfallibleKey<#mn>>(&self) -> &K {
+        pub fn get_infallible<K: fixed_typemap_internals::InfallibleKey<#mn> + #(#additional_constraints)+*>(&self) -> &K {
             unsafe { &*(#const_getter as *const K) }
         }
 
-        pub fn get_infallible_mut<K: fixed_typemap_internals::InfallibleKey<#mn>>(&mut self) -> &mut K {
+        pub fn get_infallible_mut<K: fixed_typemap_internals::InfallibleKey<#mn> + #(#additional_constraints)+*>(&mut self) -> &mut K {
             unsafe { &mut *(#mut_getter as *mut K) }
         }
     )
 }
 
-fn build_fallible_getters() -> TokenStream2 {
+fn build_fallible_getters(map: &Map) -> TokenStream2 {
+    let additional_constraints = &map.additional_key_constraints;
     quote!(
-        pub fn get<K: core::any::Any>(&self) -> Option<&K> {
+        pub fn get<K: core::any::Any + #(#additional_constraints)+*>(&self) -> Option<&K> {
             self.get_const_ptr::<K>()
                 .map(|x| unsafe { &*(x as *const K) })
         }
 
-        pub fn get_mut<K: core::any::Any>(&mut self) -> Option<&mut K> {
+        pub fn get_mut<K: core::any::Any + #(#additional_constraints)+*>(&mut self) -> Option<&mut K> {
             self.get_mut_ptr::<K>()
                 .map(|x| unsafe { &mut *(x as *mut K) })
         }
@@ -332,6 +382,8 @@ fn build_fallible_getters() -> TokenStream2 {
 }
 
 fn build_insert(map: &Map) -> TokenStream2 {
+    let additional_constraints = &map.additional_key_constraints;
+
     let mut dynamic_clause = quote!(Err(()));
     if map.parsed_attrs.dynamic {
         let df = &map.dynamic_field_name;
@@ -344,7 +396,7 @@ fn build_insert(map: &Map) -> TokenStream2 {
         );
     }
 
-    quote!(pub fn insert<K: core::any::Any>(&mut self, mut value: K) -> Result<Option<K>, ()> {
+    quote!(pub fn insert<K: core::any::Any + #(#additional_constraints)+*>(&mut self, mut value: K) -> Result<Option<K>, ()> {
         use core::any::Any;
 
         if let Some(x) = self.get_mut_ptr::<K>() {
@@ -356,13 +408,62 @@ fn build_insert(map: &Map) -> TokenStream2 {
     })
 }
 
+fn build_iterators(map: &Map) -> TokenStream2 {
+    let mut methods = vec![];
+
+    for (trait_path, name) in map.parsed_attrs.iterable_traits.iter() {
+        for is_mut in [false, true] {
+            let method_name = quote::format_ident!("{}{}", name, if is_mut { "_mut" } else { "" });
+            let maybe_mut = if is_mut { quote!(mut) } else { quote!() };
+            let iter_fn = quote::format_ident!("values{}", if is_mut { "_mut" } else { "" });
+
+            // This works by having two iterators that we chain.  The first is a fixed-sized array which consists of the
+            // non-dynamic fields pre-cast to the trait object.  The second consists of a map over the cell type, using
+            // the inline function pointers therein to convert to the trait object as needed.
+            let static_fields = map
+                .entries
+                .iter()
+                .map(|e| {
+                    let fname = &e.name.as_ref().unwrap();
+
+                    quote!(&#maybe_mut self.#fname as &#maybe_mut dyn #trait_path)
+                })
+                .collect::<Vec<_>>();
+            let static_fields_len = static_fields.len();
+
+            let mut dynamic_part = quote!(let dyn_iter = core::iter::empty());
+            if map.parsed_attrs.dynamic {
+                let df = &map.dynamic_field_name;
+                dynamic_part = quote!(
+                    let dyn_ref = &#maybe_mut self.#df;
+                    let dyn_iter = dyn_ref.#iter_fn().map(|x| {
+                        (x.#method_name)(&#maybe_mut *x.value)
+                    });
+                )
+            }
+
+            methods.push(quote!(
+                fn #method_name(&#maybe_mut self) -> impl core::iter::Iterator<Item=&#maybe_mut dyn #trait_path> {
+                    let static_arr: [&#maybe_mut dyn #trait_path; #static_fields_len] = [#(#static_fields),*];
+                    let static_iter = static_arr.into_iter();
+                    #dynamic_part
+                    static_iter.chain(dyn_iter)
+                }
+            ));
+        }
+    }
+
+    quote!(#(#methods)*)
+}
+
 fn build_impl_block(map: &Map) -> TokenStream2 {
     let mn = &map.name;
     let constructors = build_constructors(map);
     let unsafe_getters = build_unsafe_getters(map);
     let infallible_getters = build_infallible_getters(map);
-    let fallible_getters = build_fallible_getters();
+    let fallible_getters = build_fallible_getters(map);
     let insert = build_insert(map);
+    let iterators = build_iterators(&map);
 
     quote!(impl #mn {
         #constructors
@@ -370,6 +471,7 @@ fn build_impl_block(map: &Map) -> TokenStream2 {
         #infallible_getters
         #fallible_getters
         #insert
+        #iterators
     })
 }
 

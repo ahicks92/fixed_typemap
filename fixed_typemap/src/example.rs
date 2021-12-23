@@ -45,6 +45,58 @@ decl_fixed_typemap!(
     }
 );
 
+pub trait IntegralId {
+    fn get_id(&self) -> u64;
+    fn set_id(&mut self, id: u64);
+}
+
+#[derive(Default, derive_more::Display)]
+#[display(fmt = "id1={}", _0)]
+struct IdContainer1(u64);
+
+#[derive(Default, derive_more::Display)]
+#[display(fmt = "id2={}", _0)]
+struct IdContainer2(u64);
+
+#[derive(Default, derive_more::Display)]
+#[display(fmt = "id3={}", _0)]
+struct IdContainer3(u64);
+
+#[derive(Default, derive_more::Display)]
+#[display(fmt = "id4={}", _0)]
+struct IdContainer4(u64);
+
+macro_rules! impl_integral_id {
+    ($t: ty) => {
+        impl IntegralId for $t {
+            fn get_id(&self) -> u64 {
+                self.0
+            }
+
+            fn set_id(&mut self, id: u64) {
+                self.0 = id
+            }
+        }
+    };
+    ($t: ty, $($rest: ty),+) => {
+        impl_integral_id!($t);
+        impl_integral_id!($($rest),*);
+    }
+}
+
+impl_integral_id! {IdContainer1, IdContainer2, IdContainer3, IdContainer4}
+
+decl_fixed_typemap! {
+    #[fixed_typemap(dynamic, iterable_traits(
+        std::fmt::Display="iter_display",
+        IntegralId = "iter_integral_id",
+    ))]
+    pub struct IterationExampleMap {
+        _: IdContainer1,
+        _: IdContainer2,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -142,5 +194,108 @@ mod tests {
         assert_eq!(map.get::<u64>().unwrap(), &1);
         assert_eq!(map.insert::<u64>(5).expect("Should insert").unwrap(), 1);
         assert_eq!(map.get::<u64>().unwrap(), &5);
+    }
+
+    #[test]
+    fn test_iterating() {
+        let mut map = IterationExampleMap::new();
+
+        // Insert our ids.
+        map.insert::<IdContainer1>(IdContainer1(1)).unwrap();
+        map.insert::<IdContainer2>(IdContainer2(2)).unwrap();
+        map.insert::<IdContainer3>(IdContainer3(3)).unwrap();
+        map.insert::<IdContainer4>(IdContainer4(4)).unwrap();
+
+        // Let's exercise normal iteration.
+        let mut ids = map
+            .iter_integral_id()
+            .map(|x| x.get_id())
+            .collect::<Vec<_>>();
+        ids.sort();
+        assert_eq!(ids, vec![1, 2, 3, 4]);
+
+        let mut displays = map
+            .iter_display()
+            .map(|x| x.to_string())
+            .collect::<Vec<String>>();
+        displays.sort();
+        assert_eq!(
+            displays,
+            vec![
+                "id1=1".to_string(),
+                "id2=2".into(),
+                "id3=3".into(),
+                "id4=4".into()
+            ]
+        );
+
+        // Now let's exercise mutable iteration, by incrementing the counters.
+        for i in map.iter_integral_id_mut() {
+            i.set_id(i.get_id() + 1);
+        }
+
+        let mut ids2 = map
+            .iter_integral_id()
+            .map(|x| x.get_id())
+            .collect::<Vec<_>>();
+        ids2.sort();
+        assert_eq!(ids2, vec![2, 3, 4, 5]);
+    }
+
+    decl_fixed_typemap! {
+        #[fixed_typemap(dynamic, iterable_traits(
+            std::fmt::Display="iter_display",
+            IntegralId = "iter_integral_id",
+        ))]
+        pub struct TestFixedIteration {
+            _: IdContainer1,
+            _: IdContainer2,
+        }
+    }
+
+    #[test]
+    fn test_iterating_fixed() {
+        let mut map = TestFixedIteration::new();
+
+        // Insert our ids.
+        map.insert::<IdContainer1>(IdContainer1(1)).unwrap();
+        map.insert::<IdContainer2>(IdContainer2(2)).unwrap();
+        map.insert::<IdContainer3>(IdContainer3(3)).unwrap();
+        map.insert::<IdContainer4>(IdContainer4(4)).unwrap();
+
+        // Let's exercise normal iteration.
+        let mut ids = map
+            .iter_integral_id()
+            .map(|x| x.get_id())
+            .collect::<Vec<_>>();
+        ids.sort();
+        assert_eq!(ids, vec![1, 2, 3, 4]);
+
+        let mut displays = map
+            .iter_display()
+            .map(|x| x.to_string())
+            .collect::<Vec<String>>();
+        displays.sort();
+        assert_eq!(
+            displays,
+            vec![
+                "id1=1".to_string(),
+                "id2=2".into(),
+                "id3=3".into(),
+                "id4=4".into()
+            ]
+        );
+
+        // Now let's exercise mutable iteration, by incrementing the counters.
+        for i in map.iter_integral_id_mut() {
+            i.set_id(i.get_id() + 1);
+        }
+
+        let mut ids2 = map
+            .iter_integral_id()
+            .map(|x| x.get_id())
+            .collect::<Vec<_>>();
+        ids2.sort();
+        assert_eq!(ids2, vec![2, 3, 4, 5]);
     }
 }

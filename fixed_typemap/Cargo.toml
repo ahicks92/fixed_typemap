@@ -8,3 +8,6 @@ edition = "2021"
 [dependencies]
 fixed_typemap_internals = { version = "0.1.0", path = "../fixed_typemap_internals" }
 fixed_typemap_macros = { version = "0.1.0", path = "../fixed_typemap_macros" }
+derive_more = "0.99.17"
+
+[dev-dependencies]

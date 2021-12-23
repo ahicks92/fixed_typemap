@@ -4,11 +4,19 @@ use std::collections::HashSet;
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 
+use darling::FromAttributes;
 use quote::{quote, quote_spanned};
 use syn::{
     parse::{Parse, ParseStream, Result as PResult},
     parse_quote, Token,
 };
+
+#[derive(Debug, darling::FromAttributes)]
+#[darling(attributes(fixed_typemap))]
+struct MapAttributes {
+    #[darling(default)]
+    dynamic: bool,
+}
 
 struct MapEntry {
     attrs: Vec<syn::Attribute>,
@@ -19,7 +27,8 @@ struct MapEntry {
 }
 
 struct Map {
-    attrs: Vec<syn::Attribute>,
+    forwarded_attrs: Vec<syn::Attribute>,
+    parsed_attrs: MapAttributes,
     vis: syn::Visibility,
     name: syn::Ident,
     entries: Vec<MapEntry>,
@@ -57,7 +66,20 @@ impl Parse for MapEntry {
 
 impl Parse for Map {
     fn parse(stream: ParseStream) -> PResult<Self> {
-        let attrs = stream.call(syn::Attribute::parse_outer)?;
+        let mut forwarded_attrs = stream.call(syn::Attribute::parse_outer)?;
+        let parsed_attrs = MapAttributes::from_attributes(&forwarded_attrs)
+            .map_err(|e| stream.error(e.to_string()))?;
+
+        // We must now get rid of all of the fixed_typemap attributes.
+        forwarded_attrs.retain(|i| {
+            for seg in i.path.segments.iter() {
+                if seg.ident == "fixed_typemap" {
+                    return false;
+                }
+            }
+            true
+        });
+
         let vis = stream.parse()?;
         stream.parse::<Token![struct]>()?;
         let name = stream.parse()?;
@@ -70,7 +92,8 @@ impl Parse for Map {
             .collect();
 
         Ok(Map {
-            attrs,
+            forwarded_attrs,
+            parsed_attrs,
             vis,
             name,
             entries,
@@ -117,10 +140,10 @@ fn quote_struct(map: &Map) -> TokenStream2 {
         fields.push(quote!(#(#attrs)* #vis #name : #key_type));
     }
 
-    let attrs = &map.attrs;
+    let forwarded_attrs = &map.forwarded_attrs;
     let name = &map.name;
     let vis = &map.vis;
-    quote!(#(#attrs)* #vis struct #name { #(#fields),* })
+    quote!(#(#forwarded_attrs)* #vis struct #name { #(#fields),* })
 }
 
 /// Output the impls needed for the Key trait.

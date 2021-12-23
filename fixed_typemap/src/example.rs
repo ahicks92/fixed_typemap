@@ -25,6 +25,7 @@ pub fn build_initial_metrics() -> Metrics {
 }
 
 decl_fixed_typemap!(
+    #[fixed_typemap(dynamic)]
     pub struct ExampleMap {
         /// Let's let the name field be public.
         name: String,

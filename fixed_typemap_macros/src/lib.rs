@@ -36,7 +36,6 @@ struct Map {
     dynamic_cell_name: syn::Ident,
 }
 
-
 /// Build and return a macro snippet which uses unreachable for a fast unwrap.
 ///
 /// Very unsafe, use with care.
@@ -171,6 +170,12 @@ fn build_cell_type(m: &Map) -> TokenStream2 {
     let name = &m.dynamic_cell_name;
     quote!(struct #name {
         value: std::boxed::Box<dyn std::any::Any>,
+    }
+
+    impl #name {
+        fn new<K: core::any::Any>(value: K) -> Self {
+            Self { value: Box::new(value) }
+        }
     })
 }
 
@@ -312,16 +317,43 @@ fn build_infallible_getters(map: &Map) -> TokenStream2 {
     )
 }
 
+fn build_insert(map: &Map) -> TokenStream2 {
+    let mut dynamic_clause = quote!(None);
+    if map.parsed_attrs.dynamic {
+        let df = &map.dynamic_field_name;
+        let dc = &map.dynamic_cell_name;
+        let unwrapper = fast_unwrap(quote!(x.value.downcast::<K>().ok()));
+        dynamic_clause = quote!(
+            let tid = core::any::TypeId::of::<K>();
+            self.#df.insert(tid, #dc::new(value))
+                .map(|x| *(#unwrapper))
+        );
+    }
+
+    quote!(pub fn insert<K: core::any::Any>(&mut self, mut value: K) -> Option<K> {
+        use core::any::Any;
+
+        if let Some(x) = self.get_mut_ptr::<K>() {
+            std::mem::swap(&mut value, unsafe { &mut *(x as *mut K) });
+            return Some(value);
+        }
+
+        #dynamic_clause
+    })
+}
+
 fn build_impl_block(map: &Map) -> TokenStream2 {
     let mn = &map.name;
     let constructors = build_constructors(map);
     let unsafe_getters = build_unsafe_getters(map);
     let safe_getters = build_infallible_getters(map);
+    let insert = build_insert(map);
 
     quote!(impl #mn {
         #constructors
         #unsafe_getters
         #safe_getters
+        #insert
     })
 }
 

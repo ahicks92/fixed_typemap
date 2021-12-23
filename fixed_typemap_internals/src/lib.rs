@@ -10,5 +10,4 @@ pub use fixed_typemap_macros::*;
 ///
 /// You should never implement this trait yourself.
 pub unsafe trait Key<Map>: Sized + core::any::Any {
-    type Value: Sized;
 }

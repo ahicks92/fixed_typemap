@@ -13,15 +13,15 @@ pub struct Filesystem {
     pub path: &'static str,
 }
 
-/// Refers to a HashMap of metrics.
-pub struct MetricsKey;
+/// a HashMap of metrics.
+pub struct Metrics(pub HashMap<String, u64>);
 
 /// Builds a hashmap containing some example metrics.
-pub fn build_initial_metrics() -> HashMap<String, u64> {
+pub fn build_initial_metrics() -> Metrics {
     let mut h = HashMap::new();
     h.insert("successes".into(), 5);
     h.insert("failures".into(), 10);
-    h
+    Metrics(h)
 }
 
 decl_fixed_typemap!(
@@ -30,7 +30,7 @@ decl_fixed_typemap!(
         name: String,
         _: Time,
         _: Filesystem,
-        _: MetricsKey -> HashMap<String, u64> = build_initial_metrics(),
+        _: Metrics = build_initial_metrics(),
     }
 );
 
@@ -50,13 +50,13 @@ mod tests {
         assert_eq!(map.get::<Filesystem>().path, "foo");
 
         {
-            let metrics = map.get::<MetricsKey>();
+            let metrics = &map.get::<Metrics>().0;
             assert_eq!(metrics.get("successes"), Some(&5));
             assert_eq!(metrics.get("failures"), Some(&10));
         }
 
         {
-            let metrics_mut = map.get_mut::<MetricsKey>();
+            let metrics_mut = &mut map.get_mut::<Metrics>().0;
             metrics_mut.insert("bar".into(), 15);
             assert_eq!(metrics_mut.get("bar"), Some(&15));
         }

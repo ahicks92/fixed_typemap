@@ -15,7 +15,6 @@ struct MapEntry {
     vis: syn::Visibility,
     name: Option<syn::Ident>,
     key_type: syn::Type,
-    value_type: syn::Type,
     initializer: syn::Expr,
 }
 
@@ -40,13 +39,6 @@ impl Parse for MapEntry {
         }
         stream.parse::<Token![:]>()?;
         let key_type: syn::Type = stream.parse()?;
-        let mut value_type = key_type.clone();
-
-        // If we have a ->, the value of the field is different.
-        if stream.peek(Token![->]) {
-            stream.parse::<Token![->]>()?;
-            value_type = stream.parse()?;
-        }
 
         let mut initializer = syn::parse_quote!(Default::default());
         if stream.peek(Token![=]) {
@@ -58,7 +50,6 @@ impl Parse for MapEntry {
             vis,
             key_type,
             name,
-            value_type,
             initializer,
         })
     }
@@ -120,10 +111,10 @@ fn quote_struct(map: &Map) -> TokenStream2 {
         let MapEntry {
             ref vis,
             ref attrs,
-            ref value_type,
+            ref key_type,
             ..
         } = e;
-        fields.push(quote!(#(#attrs)* #vis #name : #value_type));
+        fields.push(quote!(#(#attrs)* #vis #name : #key_type));
     }
 
     let attrs = &map.attrs;
@@ -139,10 +130,8 @@ fn build_key_traits(map: &Map) -> TokenStream2 {
     for e in map.entries.iter() {
         let name = &map.name;
         let key_type = &e.key_type;
-        let value_type = &e.value_type;
         impls.push(
             quote!(unsafe impl fixed_typemap_internals::Key<#name> for #key_type {
-                type Value = #value_type;
             }),
         );
     }
@@ -185,7 +174,7 @@ fn build_unsafe_getters(map: &Map) -> TokenStream2 {
         let clauses = type_field.iter().map(|(key, field)| {
             quote!(if core::any::TypeId::of::<K>() == core::any::TypeId::of::<#key>() {
                 return &#maybe_mut self.#field
-                    as *#const_or_mut <#key as fixed_typemap_internals::Key<Self>>::Value as *#const_or_mut u8;
+                    as *#const_or_mut #key as *#const_or_mut u8;
             })
         }).collect::<Vec<_>>();
 
@@ -205,14 +194,12 @@ fn build_unsafe_getters(map: &Map) -> TokenStream2 {
 fn build_safe_getters(map: &Map) -> TokenStream2 {
     let mn = &map.name;
     quote!(
-        pub fn get<K: fixed_typemap_internals::Key<#mn>>(&self) ->
-            &<K as fixed_typemap_internals::Key<#mn>>::Value {
-            unsafe { &*(self.get_const_ptr::<K>() as *const <K as fixed_typemap_internals::Key<#mn>>::Value) }
+        pub fn get<K: fixed_typemap_internals::Key<#mn>>(&self) -> &K {
+            unsafe { &*(self.get_const_ptr::<K>() as *const K) }
         }
 
-        pub fn get_mut<K: fixed_typemap_internals::Key<#mn>>(&mut self) ->
-            &mut <K as fixed_typemap_internals::Key<#mn>>::Value {
-            unsafe { &mut *(self.get_mut_ptr::<K>() as *mut <K as fixed_typemap_internals::Key<#mn>>::Value) }
+        pub fn get_mut<K: fixed_typemap_internals::Key<#mn>>(&mut self) -> &mut K {
+            unsafe { &mut *(self.get_mut_ptr::<K>() as *mut K) }
         }
     )
 }

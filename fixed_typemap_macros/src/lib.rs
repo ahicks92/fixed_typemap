@@ -258,6 +258,9 @@ fn build_unsafe_getters(map: &Map) -> TokenStream2 {
             let map_getter = quote::format_ident!("get{}", suffix);
             let any_ref = quote::format_ident!("downcast_{}", if is_mut { "mut" } else { "ref" });
             let df = &map.dynamic_field_name;
+
+            // Since this is a map keyed by type id, if we find the type id we expect then we found something of that
+            // type.  Thus an unsafe/fast unwrap is safe.
             let downcaster = fast_unwrap(quote!((&#maybe_mut *x.value).#any_ref::<K>()));
 
             final_clause = quote!({
@@ -268,7 +271,7 @@ fn build_unsafe_getters(map: &Map) -> TokenStream2 {
         }
 
         funcs.push(quote!(
-            fn #fident<K: fixed_typemap_internals::InfallibleKey<Self>>(&#maybe_mut self) -> Option<*#const_or_mut u8> {
+            fn #fident<K: std::any::Any>(&#maybe_mut self) -> Option<*#const_or_mut u8> {
                 use std::any::Any;
 
                 #(#clauses)*

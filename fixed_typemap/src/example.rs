@@ -101,6 +101,8 @@ decl_fixed_typemap! {
 mod tests {
     use super::*;
 
+    use crate::IterableAs;
+
     #[test]
     fn test_infallible_getters() {
         let mut map = ExampleMapFixed::new();
@@ -293,6 +295,92 @@ mod tests {
 
         let mut ids2 = map
             .iter_integral_id()
+            .map(|x| x.get_id())
+            .collect::<Vec<_>>();
+        ids2.sort();
+        assert_eq!(ids2, vec![2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn test_iterable_as_dynamic() {
+        let mut map = IterationExampleMap::new();
+
+        // Insert our ids.
+        map.insert::<IdContainer1>(IdContainer1(1)).unwrap();
+        map.insert::<IdContainer2>(IdContainer2(2)).unwrap();
+        map.insert::<IdContainer3>(IdContainer3(3)).unwrap();
+        map.insert::<IdContainer4>(IdContainer4(4)).unwrap();
+
+        // Let's exercise normal iteration.
+        let mut ids = <dyn IntegralId>::iter_as(&map)
+            .map(|x| x.get_id())
+            .collect::<Vec<_>>();
+        ids.sort();
+        assert_eq!(ids, vec![1, 2, 3, 4]);
+
+        let mut displays = <dyn std::fmt::Display>::iter_as(&map)
+            .map(|x| x.to_string())
+            .collect::<Vec<String>>();
+        displays.sort();
+        assert_eq!(
+            displays,
+            vec![
+                "id1=1".to_string(),
+                "id2=2".into(),
+                "id3=3".into(),
+                "id4=4".into()
+            ]
+        );
+
+        // Now let's exercise mutable iteration, by incrementing the counters.
+        for i in <dyn IntegralId>::iter_mut_as(&mut map) {
+            i.set_id(i.get_id() + 1);
+        }
+
+        let mut ids2 = <dyn IntegralId>::iter_mut_as(&mut map)
+            .map(|x| x.get_id())
+            .collect::<Vec<_>>();
+        ids2.sort();
+        assert_eq!(ids2, vec![2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn test_iterable_as_fixed() {
+        let mut map = TestFixedIteration::new();
+
+        // Insert our ids.
+        map.insert::<IdContainer1>(IdContainer1(1)).unwrap();
+        map.insert::<IdContainer2>(IdContainer2(2)).unwrap();
+        map.insert::<IdContainer3>(IdContainer3(3)).unwrap();
+        map.insert::<IdContainer4>(IdContainer4(4)).unwrap();
+
+        // Let's exercise normal iteration.
+        let mut ids = <dyn IntegralId>::iter_as(&map)
+            .map(|x| x.get_id())
+            .collect::<Vec<_>>();
+        ids.sort();
+        assert_eq!(ids, vec![1, 2, 3, 4]);
+
+        let mut displays = <dyn std::fmt::Display>::iter_as(&map)
+            .map(|x| x.to_string())
+            .collect::<Vec<String>>();
+        displays.sort();
+        assert_eq!(
+            displays,
+            vec![
+                "id1=1".to_string(),
+                "id2=2".into(),
+                "id3=3".into(),
+                "id4=4".into()
+            ]
+        );
+
+        // Now let's exercise mutable iteration, by incrementing the counters.
+        for i in <dyn IntegralId>::iter_mut_as(&mut map) {
+            i.set_id(i.get_id() + 1);
+        }
+
+        let mut ids2 = <dyn IntegralId>::iter_mut_as(&mut map)
             .map(|x| x.get_id())
             .collect::<Vec<_>>();
         ids2.sort();

@@ -254,6 +254,34 @@ fn build_struct(map: &Map) -> TokenStream2 {
     quote!(#(#forwarded_attrs)* #vis struct #name { #(#fields),* })
 }
 
+/// Work out the type needed to iterate by a specific trait for the given map, with the given mutability.
+fn build_iter_type(map: &Map, trait_name: &syn::Path, is_mut: bool) -> TokenStream2 {
+    // The first step is an IntoIter for the array portion.
+    let maybe_mut = if is_mut { quote!(mut) } else { quote!() };
+    let arr_len = map.entries.len();
+    let reftype = quote!(&#maybe_mut #trait_name);
+    let static_part = quote!(core::array::IntoIter<&#maybe_mut dyn #trait_name, #arr_len>);
+
+    let dynamic_part = if map.parsed_attrs.dynamic {
+        // If the array is dynamic, we need the iterator from the hashmap, which is a map over the values to convert
+        // from the cell type to the dynamic reference.
+        let celltype = &map.dynamic_cell_name;
+        let map_iter_type = if is_mut {
+            quote!(ValuesMut)
+        } else {
+            quote!(Values)
+        };
+
+        quote!(core::iter::Map<std::collections::hash_map::#map_iter_type<'_, core::any::TypeId, #celltype>, for<'r> fn(&'r #maybe_mut #celltype) -> &'r #maybe_mut (dyn #trait_name + 'r)>)
+    } else {
+        // Otherwise, it's the empty iterator.
+        quote!(core::iter::Empty<#reftype>)
+    };
+
+    // The result is the chain of these types.
+    quote!(core::iter::Chain<#static_part, #dynamic_part>)
+}
+
 /// Implement all the traits we want to implement.
 fn build_trait_impls(map: &Map) -> TokenStream2 {
     let name = &map.name;
@@ -422,8 +450,10 @@ fn build_iterators(map: &Map) -> TokenStream2 {
     for (trait_path, name) in map.parsed_attrs.iterable_traits.iter() {
         for is_mut in [false, true] {
             let method_name = quote::format_ident!("{}{}", name, if is_mut { "_mut" } else { "" });
+            let cell_type = &map.dynamic_cell_name;
             let maybe_mut = if is_mut { quote!(mut) } else { quote!() };
             let iter_fn = quote::format_ident!("values{}", if is_mut { "_mut" } else { "" });
+            let return_type = build_iter_type(map, &trait_path, is_mut);
 
             // This works by having two iterators that we chain.  The first is a fixed-sized array which consists of the
             // non-dynamic fields pre-cast to the trait object.  The second consists of a map over the cell type, using
@@ -444,14 +474,18 @@ fn build_iterators(map: &Map) -> TokenStream2 {
                 let df = &map.dynamic_field_name;
                 dynamic_part = quote!(
                     let dyn_ref = &#maybe_mut self.#df;
-                    let dyn_iter = dyn_ref.#iter_fn().map(|x| {
-                        (x.#method_name)(&#maybe_mut *x.value)
-                    });
+                    // We need a function which can be used as a function pointer to convert, as well as the map.  This
+                    // makes it possible to name the return type.
+                    fn conv<'b>(cell: &'b #maybe_mut #cell_type) -> &'b #maybe_mut dyn #trait_path {
+                        (cell.#method_name)(&#maybe_mut *cell.value)
+                    }
+
+                    let dyn_iter = dyn_ref.#iter_fn().map(conv as fn(&#maybe_mut #cell_type) -> &#maybe_mut dyn #trait_path);
                 )
             }
 
             methods.push(quote!(
-                fn #method_name(&#maybe_mut self) -> impl core::iter::Iterator<Item=&#maybe_mut dyn #trait_path> {
+                fn #method_name(&#maybe_mut self) -> #return_type {
                     let static_arr: [&#maybe_mut dyn #trait_path; #static_fields_len] = [#(#static_fields),*];
                     let static_iter = static_arr.into_iter();
                     #dynamic_part

@@ -254,18 +254,26 @@ fn build_struct(map: &Map) -> TokenStream2 {
     quote!(#(#forwarded_attrs)* #vis struct #name { #(#fields),* })
 }
 
-/// Output the impls needed for the Key trait.
+/// Implement all the traits we want to implement.
 fn build_trait_impls(map: &Map) -> TokenStream2 {
+    let name = &map.name;
+
     let mut impls = vec![];
 
     for e in map.entries.iter() {
-        let name = &map.name;
         let key_type = &e.key_type;
         impls.push(
             quote!(unsafe impl fixed_typemap_internals::InfallibleKey<#name> for #key_type {
             }),
         );
     }
+
+    // Implement default, for convenience.
+    impls.push(quote!(
+        impl core::default::Default for #name {
+            fn default() -> Self { Self::new() }
+        }
+    ));
 
     quote!(#(#impls)*)
 }

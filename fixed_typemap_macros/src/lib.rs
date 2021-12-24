@@ -255,7 +255,7 @@ fn build_struct(map: &Map) -> TokenStream2 {
 }
 
 /// Output the impls needed for the Key trait.
-fn build_key_traits(map: &Map) -> TokenStream2 {
+fn build_trait_impls(map: &Map) -> TokenStream2 {
     let mut impls = vec![];
 
     for e in map.entries.iter() {
@@ -480,7 +480,7 @@ pub fn decl_fixed_typemap(input: TokenStream) -> TokenStream {
     let mut map = syn::parse_macro_input!(input as Map);
     ensure_names(&mut map);
     let struct_def = build_struct(&map);
-    let key_traits = build_key_traits(&map);
+    let key_traits = build_trait_impls(&map);
     let cell_type = build_cell_type(&map);
     let impl_block = build_impl_block(&map);
 

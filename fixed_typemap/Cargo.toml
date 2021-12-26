@@ -2,7 +2,7 @@
 name = "fixed_typemap"
 version = "0.1.0"
 edition = "2021"
-license = "unlicense"
+license = "Unlicense"
 readme = "../README.md"
 description = "A typemap which can allocate types inline with zero overhead and allow for iteration by traits"
 homepage = "https://docs.rs/fixed_typemap"

@@ -212,7 +212,9 @@ fn build_cell_type(map: &Map) -> TokenStream2 {
 
     let constraints = &map.additional_key_constraints;
 
-    quote!(pub struct #name {
+    quote!(
+        /// Exposed only so that it is possible to name iterator types.
+        pub struct #name {
         value: std::boxed::Box<dyn std::any::Any>,
         #(#field_decls),*
     }
@@ -348,6 +350,9 @@ fn build_constructors(map: &Map) -> TokenStream2 {
     }
 
     quote!(
+        /// Construct a new typemap.
+        ///
+        /// All fixed fields will have their specified default value.  If there is a dynamic sectionb, it will be empty.
         pub fn new() -> Self {
             Self {
                 #(#joined_fields),*
@@ -419,10 +424,18 @@ fn build_infallible_getters(map: &Map) -> TokenStream2 {
     let mut_getter = fast_unwrap(quote!(self.get_mut_ptr::<K>()));
     let additional_constraints = &map.additional_key_constraints;
     quote!(
+        /// Get a value from the typemap which is guaranteed to be present.
+        ///
+        /// Your program won't compile if it's not.  Compiles down to a simple field borrow.
+        #[inline(always)]
         pub fn get_infallible<K: fixed_typemap_internals::InfallibleKey<#mn> + #(#additional_constraints)+*>(&self) -> &K {
             unsafe { &*(#const_getter as *const K) }
         }
 
+        /// get a mutable reference to a type guaranteed to be in the typemap.
+        ///
+        /// If it's not, your program won't compile.
+        #[inline(always)]
         pub fn get_infallible_mut<K: fixed_typemap_internals::InfallibleKey<#mn> + #(#additional_constraints)+*>(&mut self) -> &mut K {
             unsafe { &mut *(#mut_getter as *mut K) }
         }
@@ -432,11 +445,15 @@ fn build_infallible_getters(map: &Map) -> TokenStream2 {
 fn build_fallible_getters(map: &Map) -> TokenStream2 {
     let additional_constraints = &map.additional_key_constraints;
     quote!(
+        /// Try to get a type from the typemap.
+        #[inline(always)]
         pub fn get<K: core::any::Any + #(#additional_constraints)+*>(&self) -> Option<&K> {
             self.get_const_ptr::<K>()
                 .map(|x| unsafe { &*(x as *const K) })
         }
 
+        /// Try to get a mutable reference to a value in the typemap.
+        #[inline(always)]
         pub fn get_mut<K: core::any::Any + #(#additional_constraints)+*>(&mut self) -> Option<&mut K> {
             self.get_mut_ptr::<K>()
                 .map(|x| unsafe { &mut *(x as *mut K) })
@@ -459,16 +476,22 @@ fn build_insert(map: &Map) -> TokenStream2 {
         );
     }
 
-    quote!(pub fn insert<K: core::any::Any + #(#additional_constraints)+*>(&mut self, mut value: K) -> Result<Option<K>, ()> {
-        use core::any::Any;
+    quote!(
+        /// Try to insert into the typemap.
+        ///
+        /// Like the std collections, inserting a value that's already in the map returns `Some(old_value)` and updates
+        /// it. Errors if the typemap is fixed and the type provided isn't present.
+        pub fn insert<K: core::any::Any + #(#additional_constraints)+*>(&mut self, mut value: K) -> Result<Option<K>, ()> {
+            use core::any::Any;
 
-        if let Some(x) = self.get_mut_ptr::<K>() {
-            core::mem::swap(&mut value, unsafe { &mut *(x as *mut K) });
-            return Ok(Some(value));
+            if let Some(x) = self.get_mut_ptr::<K>() {
+                core::mem::swap(&mut value, unsafe { &mut *(x as *mut K) });
+                return Ok(Some(value));
+            }
+
+            #dynamic_clause
         }
-
-        #dynamic_clause
-    })
+    )
 }
 
 fn build_iterators(map: &Map) -> TokenStream2 {
@@ -512,7 +535,7 @@ fn build_iterators(map: &Map) -> TokenStream2 {
             }
 
             methods.push(quote!(
-                fn #method_name(&#maybe_mut self) -> #return_type {
+                pub fn #method_name(&#maybe_mut self) -> #return_type {
                     let static_arr: [&#maybe_mut dyn #trait_path; #static_fields_len] = [#(#static_fields),*];
                     let static_iter = static_arr.into_iter();
                     #dynamic_part
@@ -544,6 +567,7 @@ fn build_impl_block(map: &Map) -> TokenStream2 {
     })
 }
 
+/// Generate a fixed typemap.
 #[proc_macro]
 pub fn decl_fixed_typemap(input: TokenStream) -> TokenStream {
     let mut map = syn::parse_macro_input!(input as Map);

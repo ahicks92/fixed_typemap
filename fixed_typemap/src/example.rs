@@ -1,3 +1,8 @@
+//! Demonstrates the generated code.
+//!
+//! This module serves two purposes.  First is to host the generated code on docs.rs so that the output can be
+//! demonstrated.  Second is to contain all the crate's unit tests.  Viewing the source of this module demonstrates all
+//! the features that exist, but see also the crate-level docs which contains a worked example.
 #![allow(dead_code)]
 use std::collections::HashMap;
 
@@ -25,9 +30,10 @@ pub fn build_initial_metrics() -> Metrics {
 }
 
 decl_fixed_typemap!(
+    /// A typemap demonstrating the most basic functionality: it's fixed, and has no iterable traits.
     pub struct ExampleMapFixed {
         /// Let's let the name field be public.
-        name: String,
+        pub name: String,
         _: Time,
         _: Filesystem,
         _: Metrics = build_initial_metrics(),
@@ -35,16 +41,18 @@ decl_fixed_typemap!(
 );
 
 decl_fixed_typemap!(
+    /// This typemap provides the dynamic section.
     #[fixed_typemap(dynamic)]
     pub struct ExampleMapDynamic {
         /// Let's let the name field be public.
-        name: String,
+        pub name: String,
         _: Time,
         _: Filesystem,
         _: Metrics = build_initial_metrics(),
     }
 );
 
+/// For demonstration purposes, a trait which represents things containing integral ids.
 pub trait IntegralId {
     fn get_id(&self) -> u64;
     fn set_id(&mut self, id: u64);
@@ -87,6 +95,7 @@ macro_rules! impl_integral_id {
 impl_integral_id! {IdContainer1, IdContainer2, IdContainer3, IdContainer4}
 
 decl_fixed_typemap! {
+    /// A typemap supporting iteration by a couple different traits.
     #[fixed_typemap(dynamic, iterable_traits(
         std::fmt::Display="iter_display",
         IntegralId = "iter_integral_id",

@@ -2,6 +2,11 @@
 name = "fixed_typemap"
 version = "0.1.0"
 edition = "2021"
+license = "unlicense"
+readme = "../README.md"
+description = "A typemap which can allocate types inline with zero overhead and allow for iteration by traits"
+homepage = "https://docs.rs/fixed_typemap"
+repository = "https://github.com/ahicks92/fixed_typemap"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

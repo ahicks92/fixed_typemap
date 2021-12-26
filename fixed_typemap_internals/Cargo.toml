@@ -3,6 +3,9 @@ name = "fixed_typemap_internals"
 version = "0.1.0"
 edition = "2021"
 license = "Unlicense"
+description = "Internals for the fixed_typemap crate"
+homepage = "https://docs.rs/fixed_typemap"
+repository = "https://github.com/ahicks92/fixed_typemap"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

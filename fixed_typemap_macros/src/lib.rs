@@ -307,6 +307,12 @@ fn build_trait_impls(map: &Map) -> TokenStream2 {
                 fn get_infallible_mut(map: &mut #name) -> &mut #key_type {
                     &mut map.#field_name
                 }
+
+                fn insert_infallible(map: &mut #name, mut value: Self) -> Option<Self> {
+                    let dest = Self::get_infallible_mut(map);
+                    core::mem::swap(&mut value, dest);
+                    Some(value)
+                }
             }),
         );
     }
@@ -496,6 +502,11 @@ fn build_insert(map: &Map) -> TokenStream2 {
             }
 
             #dynamic_clause
+        }
+
+        /// Insert into the typemap where the key is known to be in the typemap at the type system level.
+        pub fn insert_infallible<K: fixed_typemap_internals::InfallibleKey<Self>>(&mut self, value: K) -> Option<K> {
+            K::insert_infallible(self, value)
         }
     )
 }

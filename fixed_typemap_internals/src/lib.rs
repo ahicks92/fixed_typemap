@@ -14,9 +14,11 @@ pub use fixed_typemap_macros::*;
 /// it.
 ///
 /// You should never implement this trait yourself.
-pub unsafe trait InfallibleKey<Map>: core::any::Any {
+pub unsafe trait InfallibleKey<Map>: core::any::Any + Sized {
     fn get_infallible(map: &Map) -> &Self;
     fn get_infallible_mut(map: &mut Map) -> &mut Self;
+
+    fn insert_infallible(map: &mut Map, value: Self) -> Option<Self>;
 }
 
 /// A trait which represents the ability to iterate over a typemap with a specific trait object tuype.

@@ -297,8 +297,16 @@ fn build_trait_impls(map: &Map) -> TokenStream2 {
 
     for e in map.entries.iter() {
         let key_type = &e.key_type;
+        let field_name = e.name.as_ref().unwrap();
         impls.push(
             quote!(unsafe impl fixed_typemap_internals::InfallibleKey<#name> for #key_type {
+                fn get_infallible(map: &#name) -> &#key_type {
+                    &map.#field_name
+                }
+
+                fn get_infallible_mut(map: &mut #name) -> &mut #key_type {
+                    &mut map.#field_name
+                }
             }),
         );
     }
@@ -420,8 +428,6 @@ fn build_unsafe_getters(map: &Map) -> TokenStream2 {
 
 fn build_infallible_getters(map: &Map) -> TokenStream2 {
     let mn = &map.name;
-    let const_getter = fast_unwrap(quote!(self.get_const_ptr::<K>()));
-    let mut_getter = fast_unwrap(quote!(self.get_mut_ptr::<K>()));
     let additional_constraints = &map.additional_key_constraints;
     quote!(
         /// Get a value from the typemap which is guaranteed to be present.
@@ -429,7 +435,7 @@ fn build_infallible_getters(map: &Map) -> TokenStream2 {
         /// Your program won't compile if it's not.  Compiles down to a simple field borrow.
         #[inline(always)]
         pub fn get_infallible<K: fixed_typemap_internals::InfallibleKey<#mn> + #(#additional_constraints)+*>(&self) -> &K {
-            unsafe { &*(#const_getter as *const K) }
+            K::get_infallible(self)
         }
 
         /// get a mutable reference to a type guaranteed to be in the typemap.
@@ -437,7 +443,7 @@ fn build_infallible_getters(map: &Map) -> TokenStream2 {
         /// If it's not, your program won't compile.
         #[inline(always)]
         pub fn get_infallible_mut<K: fixed_typemap_internals::InfallibleKey<#mn> + #(#additional_constraints)+*>(&mut self) -> &mut K {
-            unsafe { &mut *(#mut_getter as *mut K) }
+            K::get_infallible_mut(self)
         }
     )
 }

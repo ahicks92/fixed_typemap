@@ -3,7 +3,6 @@
 //! This module serves two purposes.  First is to host the generated code on docs.rs so that the output can be
 //! demonstrated.  Second is to contain all the crate's unit tests.  Viewing the source of this module demonstrates all
 //! the features that exist, but see also the crate-level docs which contains a worked example.
-#![allow(dead_code)]
 use std::collections::HashMap;
 
 use crate::*;
